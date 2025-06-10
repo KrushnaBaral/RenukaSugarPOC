@@ -3,7 +3,7 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain.memory import ChatMessageHistory
 from langchain_openai import ChatOpenAI
 from base import *
-from datetime import datetime
+
 from dotenv import load_dotenv
 from io import BytesIO, StringIO
 from state import session_state
@@ -53,13 +53,7 @@ from io import BytesIO
 import os, csv
 import pandas as pd
 
-# # Add these imports at the top of your FastAPI file
-# from azure.core.credentials import AzureKeyCredential
-# from azure.ai.formrecognizer import DocumentAnalysisClient
-# from bill_datas import invoice_data, reciept_data, awb_data, packing_data
-# import os
-# from io import BytesIO
-# from werkzeug.utils import secure_filename
+# Add these imports at the top of your FastAPI file
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from bill_datas import invoice_data, reciept_data, awb_data, packing_data,renuka_data
@@ -71,7 +65,6 @@ from werkzeug.utils import secure_filename
 from fastapi import FastAPI, HTTPException, Depends, status, Form
 import psycopg2
 from psycopg2 import sql
-
 
 from langchain.chains.openai_tools import create_extraction_chain_pydantic
 from langchain_core.pydantic_v1 import Field
@@ -107,16 +100,13 @@ templates = Jinja2Templates(directory="templates")
 question_dropdown = os.getenv('Question_dropdown')
 llm = ChatOpenAI(model=models, temperature=0)  # Adjust model as necessary
 openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
 from table_details import get_table_details  # Importing the function
 
 class Table(BaseModel):
     """Table in SQL database."""
     name: str = Field(description="Name of table in SQL database.")
-endpoint = os.environ.get('endpoint')
-key = os.environ.get('key')
-document_analysis_client = DocumentAnalysisClient(
-    endpoint=endpoint, credential=AzureKeyCredential(key)
-)
+
 
 
 from urllib.parse import quote
@@ -131,47 +121,10 @@ except Exception as e:
     raise  # Re-raise the exception to prevent the app from starting
 
 
-# Set up static files and templates
-app.mount("/stats", StaticFiles(directory="stats"), name="stats")
-templates = Jinja2Templates(directory="templates")
-
-# Initialize OpenAI API key and model
-
-
-
-llm = ChatOpenAI(model='gpt-4o-mini', temperature=0)  # Adjust model as necessary
-openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
-
-from table_details import get_table_details  # Importing the function
-
-class Table(BaseModel):
-    """Table in SQL database."""
-    name: str = Field(description="Name of table in SQL database.")
-
-
-@app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
-
-    # Extract table names dynamically
-    tables = []
-
-    # Pass dynamically populated dropdown options to the template
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "models": models,
-        "databases": databases,  # Dynamically populated database dropdown
-        "section": subject_areas2,
-        "tables": tables,        # Table dropdown based on database selection
-        "question_dropdown": question_dropdown.split(','),  # Static questions from env
-    })
 
 
 
 
-
-from fastapi import FastAPI, HTTPException, Depends, status, Form
-import psycopg2
-from psycopg2 import sql
 class ChartRequest(BaseModel):
     """
     Pydantic model for chart generation requests.
@@ -205,7 +158,8 @@ def get_db_connection():
             host=db_host,
             database=db_database,
             user=db_user,
-            password=db_password
+            password=db_password,
+            port=db_port
         )
         # Check if the connection is successful
         conn.cursor().execute("SELECT 1")
@@ -376,6 +330,7 @@ async def query_temp_docs(
     result = await temp_doc_handler.query_index(question)
 
     return JSONResponse(result)
+
 class QueryInput(BaseModel):
     """
     Pydantic model for user query input.
@@ -388,41 +343,52 @@ async def clear_temp_docs():
     temp_doc_handler.uploaded_files = []
     return JSONResponse({"status": "success", "message": "Temporary documents cleared"})
 
-# from datetime import datetime
+from datetime import datetime
 
-# # Database connection
-# def get_connection():
-#     return psycopg2.connect(
-#         dbname="postgres",
-#         user="postgres",
-#         password="Satya@2002",
-#         host="localhost",
-#         port="5432"
-#     )
+# Database connection
+def get_connection():
+    return psycopg2.connect(
+        dbname="postgres",
+        user="postgres",
+        password="Satya@2002",
+        host="localhost",
+        port="5432"
+    )
 
-# # Define the expected keys (mapping incoming camel/pascal to snake_case)
-# FIELD_MAP = {
-#     "Shipping Address": "shipping_address",
-#     "Consignee Name": "consignee_name",
-#     "Shipper Name": "shipper_name",
-#     "Consignee Address": "consignee_address",
-#     "Airway Bill Number": "airway_bill_number",
-#     "Issuer": "issuer",
-#     "Total Weight": "total_weight",
-#     "Execution Date": "execution_date",
-#     "Total Bill": "total_bill",
-#     "Currency": "currency",
-#     "Departure Airport": "departure_airport",
-#     "Destination Airport": "destination_airport",
-#     "Shipper Account Number": "shipper_account_number"
-# }
+# def try_multiple_formats(date_str):
+#     date_formats = [
+#         "%d/%m/%Y",
+#         "%d-%m-%Y",
+#         "%Y-%m-%d",
+#         "%d-%b-%Y",
+#         "%d-%b-%y",      # ✅ Supports 6-May-25
+#         "%b %d, %Y",
+#         "%d %B %Y",
+#         "%d.%m.%Y",
+#     ]
+#     for fmt in date_formats:
+#         try:
+#             return datetime.strptime(date_str.strip(), fmt).date()
+#         except ValueError:
+#             continue
+#     raise ValueError(f"Unrecognized date format: {date_str}")
 
-# @app.post("/insert_shipments")
-# async def insert_shipments(request: Request):
+app = FastAPI()
+
+FIELD_MAP = {
+    "Invoice Number": "invoice_number",
+    "Invoice Date": "invoice_date",
+    "Vendor Name": "vendor_name",
+    "Description": "description",
+    "Total Amount (In Ruppees)": "total_amount",
+    "GSTIN": "gstin"
+}
+
+# @app.post("/insert_invoices")
+# async def insert_invoices(request: Request):
 #     try:
 #         data = await request.json()
 
-#         # Normalize and insert
 #         conn = get_connection()
 #         cur = conn.cursor()
 
@@ -433,52 +399,40 @@ async def clear_temp_docs():
 #                 if mapped_key:
 #                     row[mapped_key] = value
 
-#             # Format the date
-#             execution_date = None
-#             if "execution_date" in row:
+#             # ✅ Handle flexible date formats
+#             invoice_date = None
+#             if "invoice_date" in row and row["invoice_date"]:
 #                 try:
-#                     execution_date = datetime.strptime(row["execution_date"], "%d-%b-%Y").date()
-#                 except ValueError:
-#                     raise HTTPException(status_code=400, detail="Invalid date format. Expected dd-MMM-yyyy")
+#                     invoice_date = try_multiple_formats(row["invoice_date"])
+#                 except ValueError as e:
+#                     raise HTTPException(status_code=400, detail=str(e))
 
+#             # ✅ Insert data
 #             cur.execute("""
-#                 INSERT INTO shipments (
-#                     shipping_address,
-#                     consignee_name,
-#                     shipper_name,
-#                     consignee_address,
-#                     airway_bill_number,
-#                     issuer,
-#                     total_weight,
-#                     execution_date,
-#                     total_bill,
-#                     currency,
-#                     departure_airport,
-#                     destination_airport,
-#                     shipper_account_number
-#                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-#                 ON CONFLICT (airway_bill_number) DO NOTHING;
+#                 INSERT INTO Renuka_POC (
+#                     invoice_number,
+#                     invoice_date,
+#                     vendor_name,
+#                     description,
+#                     total_amount,
+#                     gstin
+#                 ) VALUES (%s, %s, %s, %s, %s, %s)
+#                 ON CONFLICT (invoice_number) DO NOTHING;
 #             """, (
-#                 row.get("shipping_address"),
-#                 row.get("consignee_name"),
-#                 row.get("shipper_name"),
-#                 row.get("consignee_address"),
-#                 row.get("airway_bill_number"),
-#                 row.get("issuer"),
-#                 float(row.get("total_weight", 0)),
-#                 execution_date,
-#                 float(row.get("total_bill", 0)),
-#                 row.get("currency"),
-#                 row.get("departure_airport"),
-#                 row.get("destination_airport"),
-#                 row.get("shipper_account_number")
+#                 row.get("invoice_number"),
+#                 invoice_date,
+#                 row.get("vendor_name"),
+#                 row.get("description"),
+#                 float(row.get("total_amount", "0").replace(",", "").strip()) if row.get("total_amount") else None,
+
+#                 row.get("gstin")
 #             ))
 
 #         conn.commit()
 #         cur.close()
 #         conn.close()
 
-#         return {"message": "Data inserted successfully!"}
+#         return {"message": "Invoice data inserted successfully!"}
 
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
@@ -526,7 +480,21 @@ async def add_to_faqs(
             status_code=500,
             detail=f"Error saving question: {str(e)}"
         )
+@app.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
 
+    # Extract table names dynamically
+    tables = []
+
+    # Pass dynamically populated dropdown options to the template
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "models": models,
+        "databases": databases,  # Dynamically populated database dropdown
+        "section": subject_areas2,
+        "tables": tables,        # Table dropdown based on database selection
+        "question_dropdown": question_dropdown.split(','),  # Static questions from env
+    })
 # Login endpoint
 @app.post("/login")
 async def login(
@@ -627,6 +595,13 @@ def generate_chart_figure(data_df: pd.DataFrame, x_axis: str, y_axis: str, chart
         fig = px.funnel(data_df, x=x_axis, y=y_axis)
     return fig
 
+# @app.get("/", response_class=HTMLResponse)
+# async def user_page(request: Request):
+#     return templates.TemplateResponse("index.html", {"request": request})
+
+
+
+
 @app.post("/generate-chart/")
 async def generate_chart(request: ChartRequest):
     """
@@ -702,6 +677,7 @@ async def user_page(request: Request):
 @app.get("/authentication", response_class=HTMLResponse)
 async def user_page(request: Request):
     return templates.TemplateResponse("authentication.html", {"request": request})
+
 
 @app.get("/user_more", response_class=HTMLResponse)
 async def user_more(request: Request):
@@ -1430,15 +1406,12 @@ def extract_follow_ups(message_content):
                 if clean_query:
                     key = f'follow_up_{i}'
                     follow_ups[key] = clean_query
-        # Limit to maximum 3 follow-ups
-        if len(follow_ups) > 3:
-            follow_ups = dict(list(follow_ups.items())[:3])           
 
     except Exception as e:
         print(f"Error extracting follow-ups: {e}")
 
     return follow_ups
-    
+
 async def use_llamaparse(file_content, file_name):
     try:
         with open(file_name, "wb") as f:
@@ -1514,9 +1487,7 @@ async def show_documents(request: Request,
     except Exception as e:
         logging.error(f"Error showing documents: {e}")
         return JSONResponse({"status": "error", "message": "Error showing documents."})
-UPLOAD_FOLDER = 'uploads'
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+
 @app.post("/delete_document")
 async def delete_document(request: Request,
                          section: str = Form(...),
@@ -1618,6 +1589,95 @@ async def delete_document(request: Request,
         logging.error(f"Error deleting document '{doc_name}': {e}")
         print(f"Error deleting document: {e}")  # Print exception for debugging
         return JSONResponse({"status": "error", "message": "Error deleting document."})
+
+
+# Add this configuration near your other app configurations
+UPLOAD_FOLDER = 'uploads'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+# Initialize Azure Form Recognizer client
+endpoint = os.environ.get('endpoint')
+key = os.environ.get('key')
+document_analysis_client = DocumentAnalysisClient(
+    endpoint=endpoint, credential=AzureKeyCredential(key)
+)
+
+
+# # Add this route to your FastAPI app
+# @app.post("/process-document", response_class=HTMLResponse)
+# async def process_document(
+#     request: Request,
+#     service: str = Form(...),
+#     input_method: str = Form(...),
+#     file: UploadFile = File(None),
+#     bill_url: str = Form(None)
+# ):
+#     try:
+#         # Determine the poller method based on service
+#         if service == 'Invoices':
+#             poller_method = 'prebuilt-invoice'
+#         elif service == 'Renuka POC':
+#             poller_method = 'Renuka'
+#         elif service == 'Receipts':
+#             poller_method = 'prebuilt-receipt'
+#         elif service == 'AWB':
+#             poller_method = 'finance_insight'
+#         elif service == 'Packing Slip':
+#             poller_method = 'packing_slip'
+#         elif service == 'COMPOSED':
+#             poller_method = 'composed_model'
+#         else:
+#             raise HTTPException(status_code=400, detail="Invalid service type")
+
+#         # Process based on input method
+#         if input_method == 'file' and file:
+#             filename = secure_filename(file.filename)
+#             file_path = os.path.join(UPLOAD_FOLDER, filename)
+
+#             # Save the file temporarily
+#             with open(file_path, "wb") as f:
+#                 f.write(await file.read())
+#             with open(file_path, "rb") as fh:
+#                 file_buf = BytesIO(fh.read())
+
+#             poller = document_analysis_client.begin_analyze_document(poller_method, file_buf)
+#             os.remove(file_path)  # Clean up the temporary file
+
+#         elif input_method == 'url' and bill_url:
+#             poller = document_analysis_client.begin_analyze_document_from_url(poller_method, bill_url)
+#         else:
+#             raise HTTPException(status_code=400, detail="Invalid input method or missing data")
+
+#         # Get results
+#         bill_data = poller.result()
+#         results = []
+
+#         # Process results based on document type
+#         if poller_method == 'prebuilt-invoice':
+#             results = invoice_data(results, bill_data)
+#         elif poller_method == 'Renuka':
+#             results = renuka_data(results, bill_data)
+#         elif poller_method == 'prebuilt-receipt':
+#             results = reciept_data(results, bill_data)
+#         elif poller_method == 'finance_insight':
+#             results = awb_data(results, bill_data)
+#         elif poller_method == 'packing_slip':
+#             results = packing_data(results, bill_data)
+#         elif poller_method == 'composed_model':
+#             for idx, doc in enumerate(bill_data.documents):
+#                 doc_type = doc.doc_type
+#                 if doc_type == "composed_model:finance_insight":
+#                     results = awb_data(results, bill_data)
+#                 elif doc_type == "composed_model:packing_slip":
+#                     results = packing_data(results, bill_data)
+
+#         print("Results:", results)
+#         return JSONResponse(content=results)
+
+
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 @app.post("/process-document", response_class=HTMLResponse)
 async def process_document(
     request: Request,
@@ -1908,16 +1968,6 @@ def clean_date_string(date_str):
 #             continue
 
 #     raise ValueError(f"Unrecognized date format: '{date_str}'. Cleaned: {date_str}")
-app = FastAPI()
-
-FIELD_MAP = {
-    "Invoice Number": "invoice_number",
-    "Invoice Date": "invoice_date",
-    "Vendor Name": "vendor_name",
-    "Description": "description",
-    "Total Amount (In Ruppees)": "total_amount",
-    "GSTIN": "gstin"
-}
 def parse_date(date_str):
     """Robust date parser that handles messy formats including spaces and partial years"""
     if not date_str:
@@ -2003,7 +2053,7 @@ async def insert_invoices(request: Request):
                 "amount": clean_numeric(item.get("amount"))
             }
 
-        conn = get_db_connection()
+        conn = get_connection()
         cur = conn.cursor()
 
         for entry in data:
@@ -2081,4 +2131,3 @@ async def insert_invoices(request: Request):
     finally:
         cur.close()
         conn.close()
-
