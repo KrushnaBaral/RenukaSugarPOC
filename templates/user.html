@@ -1423,92 +1423,27 @@
               processRemoveLoadingIndicator();
             }
           });
-        // // Document form submission
-        // document
-        //   .getElementById("document-form")
-        //   ?.addEventListener("submit", async function (e) {
-        //     e.preventDefault();
-
-        //     const service = document.getElementById("document-service").value;
-        //     const inputMethod = document.querySelector(
-        //       'input[name="input-method"]:checked'
-        //     ).value;
-        //     const fileInput = document.getElementById("document-file");
-        //     const urlInput = document.getElementById("document-url");
-
-        //     if (!service) {
-        //       alert("Please select a document type");
-        //       return;
-        //     }
-
-        //     const formData = new FormData();
-        //     formData.append("service", service);
-        //     formData.append("input_method", inputMethod);
-
-        //     if (inputMethod === "file" && fileInput.files.length > 0) {
-        //       formData.append("file", fileInput.files[0]);
-        //     } else if (inputMethod === "url" && urlInput.value) {
-        //       formData.append("bill_url", urlInput.value);
-        //     } else {
-        //       alert(
-        //         inputMethod === "file"
-        //           ? "Please select a file"
-        //           : "Please enter a valid URL"
-        //       );
-        //       return;
-        //     }
-
-        //     try {
-        //       // Show loading indicator
-        //       processShowLoadingIndicator();
-        //       const response = await fetch("/process-document", {
-        //         method: "POST",
-        //         body: formData,
-        //       });
-
-        //       if (!response.ok) {
-        //         throw new Error(`HTTP error! status: ${response.status}`);
-        //       }
-
-        //       const data = await response.json();
-        //       displayDocumentResults(data);
-
-        //       // Close the modal
-        //       document
-        //         .getElementById("documind-modal")
-        //         .classList.remove("active");
-        //     } catch (error) {
-        //       console.error("Document processing error:", error);
-        //       addMessageToChat(
-        //         "ai",
-        //         `Error processing document: ${error.message}`
-        //       );
-        //     } finally {
-        //       // Remove loading indicator
-        //       processRemoveLoadingIndicator();
-        //     }
-        //   });
-
-        // Function to display document processing results
         function displayDocumentResults(data) {
           if (!data || data.length === 0) {
             addMessageToChat("ai", "No data extracted from document.");
             return;
           }
 
-          // Collect all possible field names from all documents
+          // Collect all possible field names from all documents (excluding tables)
           const allFields = new Set();
           data.forEach((document) => {
             if (document.results && document.results.length > 0) {
-              Object.keys(document.results[0]).forEach((field) =>
-                allFields.add(field)
-              );
+              Object.keys(document.results[0]).forEach((field) => {
+                if (field !== "tables" && field !== "List Items") {
+                  allFields.add(field);
+                }
+              });
             }
           });
 
           const fieldNames = Array.from(allFields);
 
-          // Start building the table
+          // Start building the main table
           let tableHtml = "<h3>Document Processing Results</h3>";
           tableHtml += '<table class="result-table"><thead><tr>';
 
@@ -1529,11 +1464,27 @@
 
             // Add filename cell
             tableHtml += `<td>${filename}</td>`;
-            // Collect all results for the insert operation
+
             // Add cells for each field
             if (results && results.length > 0) {
               const result = results[0];
-              allResults.push(result); // Add to allResults array
+
+              // Process tables into items array before adding to allResults
+              if (result.tables && result.tables.length > 0) {
+                result.items = [];
+                result.tables.forEach((table) => {
+                  // Convert table cells to items
+                  const items = convertTableToItems(table.cells);
+                  result.items.push(...items);
+                });
+              }
+              // delete result.tables; // Remove the tables field
+              console.log("Processed result:", result); // Log the processed result
+              const { tables, ...resultWithoutTables } = result;
+              allResults.push(resultWithoutTables); // Add to allResults array
+              // allResults.push(result); // Add to allResults array
+              console.log("Processed after result:", resultWithoutTables); // Log the processed result
+
 
               fieldNames.forEach((field) => {
                 const cellValue =
@@ -1541,7 +1492,6 @@
                     ? (result[field] || "").replace(/\n/g, "<br>")
                     : result[field] || "";
                 tableHtml += `<td>${cellValue}</td>`;
-                // tableHtml += `<td>${result[field] || ""}</td>`;
               });
             } else {
               // Empty cells if no results
@@ -1558,6 +1508,107 @@
           // Add to chat
           addMessageToChat("ai", tableHtml);
 
+          // Process and display tables for each document
+          data.forEach((document) => {
+            if (document.results && document.results.length > 0) {
+              const result = document.results[0];
+
+              // Display tables if present
+              if (result.tables && result.tables.length > 0) {
+                result.tables.forEach((table) => {
+                  displayTableData(
+                    `Invoice Items`,
+                    table.cells,
+                    document.filename
+                  );
+                });
+              }
+            }
+          });
+
+          // Helper function to convert table cells to items array
+          function convertTableToItems(cells) {
+            const items = [];
+
+            // Find max rows and columns
+            let maxRow = 0;
+            let maxCol = 0;
+            cells.forEach((cell) => {
+              if (cell.row_index > maxRow) maxRow = cell.row_index;
+              if (cell.column_index > maxCol) maxCol = cell.column_index;
+            });
+
+            // Create 2D array for the table
+            const tableGrid = Array(maxRow + 1)
+              .fill()
+              .map(() => Array(maxCol + 1).fill(""));
+
+            cells.forEach((cell) => {
+              tableGrid[cell.row_index][cell.column_index] = cell.content;
+            });
+
+            // Skip header row (row 0) and process data rows
+            for (let rowIndex = 1; rowIndex <= maxRow; rowIndex++) {
+              const row = tableGrid[rowIndex];
+              // Skip empty rows or summary rows (like Total, SGST, etc.)
+              if (row.some((cell) => cell && cell.trim() !== "")) {
+                const item = {
+                  description: row[1] || "", // Assuming description is in column 1
+                  qty: row[2] || "", // Assuming quantity is in column 2
+                  weight: row[3] || "", // Assuming weight is in column 3
+                  rate: row[4] || "", // Assuming rate is in column 4
+                  amount: row[5] || "", // Assuming amount is in column 5
+                };
+
+                // Only add if it's not a summary row
+                if (
+                  !["total", "sgst", "cgst", "cost", "gst"].some((term) =>
+                    item.description.toLowerCase().includes(term)
+                  )
+                ) {
+                  items.push(item);
+                }
+              }
+            }
+
+            return items;
+          }
+
+          // Helper function to display table data
+          function displayTableData(tableName, cells, filename) {
+            let tableHtml = `<h4>${tableName} (${filename})</h4>`;
+
+            // Find max rows and columns
+            let maxRow = 0;
+            let maxCol = 0;
+            cells.forEach((cell) => {
+              if (cell.row_index > maxRow) maxRow = cell.row_index;
+              if (cell.column_index > maxCol) maxCol = cell.column_index;
+            });
+
+            // Create 2D array for the table
+            const tableGrid = Array(maxRow + 1)
+              .fill()
+              .map(() => Array(maxCol + 1).fill(""));
+            cells.forEach((cell) => {
+              tableGrid[cell.row_index][cell.column_index] = cell.content;
+            });
+
+            tableHtml += '<table class="result-table"><tbody>';
+            tableGrid.forEach((row, rowIndex) => {
+              tableHtml += "<tr>";
+              row.forEach((cell, colIndex) => {
+                // Style header row differently
+                const cellTag = rowIndex === 0 ? "th" : "td";
+                tableHtml += `<${cellTag}>${cell}</${cellTag}>`;
+              });
+              tableHtml += "</tr>";
+            });
+            tableHtml += "</tbody></table>";
+
+            addMessageToChat("ai", tableHtml);
+          }
+
           // addMessageToChat('ai', `<div style="background:none; padding:0;"><h3>Document Processing Results</h3>${tableHtml}</div>`);
           // Add Insert/download button
           const downloadBtn = document.createElement("button");
@@ -1571,6 +1622,11 @@
           // insertBtn.innerHTML = '<span class="material-symbols-rounded">publish</span> Insert Results';
           downloadBtn.addEventListener("click", async () => {
             try {
+              console.log(
+                "Payload being sent:",
+                JSON.stringify(allResults, null, 2)
+              ); // Add this line
+
               const insertResponse = await fetch(
                 `${API_BASE_URL}/insert_invoices`,
                 {
@@ -1587,17 +1643,20 @@
               if (insertResponse.ok) {
                 alert(responseData.message || "Data inserted successfully!");
               } else {
+                console.error("Backend error:", responseData); // Add this
+
                 alert(`Error: ${responseData.detail}`);
               }
             } catch (error) {
               alert("Insert failed: " + error.message);
             }
           });
-          // // Append download button to the last AI message
+          // Append download button to the last AI message
 
           const lastMessage = document.querySelector(
             "#chat-results .ai-message:last-child"
           );
+
           if (lastMessage) {
             lastMessage.appendChild(document.createElement("br"));
             lastMessage.appendChild(downloadBtn);
@@ -1749,9 +1808,9 @@
         document.body.appendChild(visualizationPanel);
 
         // ✅ Constants
-        //const API_BASE_URL = "http://127.0.0.1:8000";
+        const API_BASE_URL = "http://127.0.0.1:8000";
         //   const API_BASE_URL = "https://lz-agenticapplication-ggc6g4a5a0ckhkgm.centralindia-01.azurewebsites.net";
-        const API_BASE_URL = "https://lz-renukasugarpoc-f0fvbrhzcmdsghce.centralindia-01.azurewebsites.net";
+        //const API_BASE_URL = "https://lz-renukasugarpoc-f0fvbrhzcmdsghce.centralindia-01.azurewebsites.net/";
 
         let isSubmitting = false;
         let mediaRecorder = null;
