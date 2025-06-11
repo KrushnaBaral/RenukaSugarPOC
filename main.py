@@ -518,9 +518,9 @@ async def login(
         cur.execute(
             sql.SQL("""
                 SELECT u.user_id, u.full_name, r.role_name
-                FROM "Management".lz_users u
-                JOIN "Management".lz_user_roles ur ON u.user_id = ur.user_id
-                JOIN "Management".lz_roles r ON ur.role_id = r.role_id
+                FROM lz_users u
+                JOIN lz_user_roles ur ON u.user_id = ur.user_id
+                JOIN lz_roles r ON ur.role_id = r.role_id
                 WHERE u.email = %s AND u.password_hash = %s
             """),
             (email, password)
