@@ -1,90 +1,182 @@
-def invoice_data(results, bill_data): #bill data for invoices
-    for idx, invoice in enumerate(bill_data.documents):
-        invoice_data = {}
+def invoice_data(results, bill_data):
+    for invoice in bill_data.documents:
+        invoice_info = {}
+
+        # Vendor information
         vendor_name = invoice.fields.get("VendorName")
-        if vendor_name:
-            invoice_data["Vendor Name"] = vendor_name.value
+        if vendor_name and hasattr(vendor_name, 'content'):
+            invoice_info["Vendor Name"] = vendor_name.content
 
         vendor_address = invoice.fields.get("VendorAddress")
-        if vendor_address:
-            invoice_data["Vendor Address"] = vendor_address.value
+        if vendor_address and hasattr(vendor_address, 'content'):
+            invoice_info["Vendor Address"] = vendor_address.content
 
         vendor_address_recipient = invoice.fields.get("VendorAddressRecipient")
-        if vendor_address_recipient:
-            invoice_data["Vendor Address Recipient"] = vendor_address_recipient.content
+        if vendor_address_recipient and hasattr(vendor_address_recipient, 'content'):
+            invoice_info["Vendor Address Recipient"] = vendor_address_recipient.content
 
+        # Customer information
         customer_name = invoice.fields.get("CustomerName")
-        if customer_name:
-            invoice_data["Customer Name"] = customer_name.value
+        if customer_name and hasattr(customer_name, 'content'):
+            invoice_info["Customer Name"] = customer_name.content
 
         customer_id = invoice.fields.get("CustomerId")
-        if customer_id:
-            invoice_data["Customer Id"] = customer_id.value
+        if customer_id and hasattr(customer_id, 'content'):
+            invoice_info["Customer ID"] = customer_id.content
 
         customer_address = invoice.fields.get("CustomerAddress")
-        if customer_address:
-            invoice_data["Customer Address"] = customer_address.value
+        if customer_address and hasattr(customer_address, 'content'):
+            invoice_info["Customer Address"] = customer_address.content
 
         customer_address_recipient = invoice.fields.get("CustomerAddressRecipient")
-        if customer_address_recipient:
-            invoice_data["Customer Address Recipient"] = customer_address_recipient.value
+        if customer_address_recipient and hasattr(customer_address_recipient, 'content'):
+            invoice_info["Customer Address Recipient"] = customer_address_recipient.content
 
+        # Invoice details
         invoice_id = invoice.fields.get("InvoiceId")
-        if invoice_id:
-            invoice_data["Invoice Id"] = invoice_id.value
+        if invoice_id and hasattr(invoice_id, 'content'):
+            invoice_info["Invoice ID"] = invoice_id.content
 
         invoice_date = invoice.fields.get("InvoiceDate")
-        if invoice_date:
-            invoice_data["Invoice Date"] = invoice_date.value
+        if invoice_date and hasattr(invoice_date, 'content'):
+            invoice_info["Invoice Date"] = invoice_date.content
 
         invoice_total = invoice.fields.get("InvoiceTotal")
-        if invoice_total:
-            invoice_data["Invoice Total"] = invoice_total.value
+        if invoice_total and hasattr(invoice_total, 'content'):
+            invoice_info["Invoice Total"] = invoice_total.content
 
+        due_date = invoice.fields.get("DueDate")
+        if due_date and hasattr(due_date, 'content'):
+            invoice_info["Due Date"] = due_date.content
+
+        purchase_order = invoice.fields.get("PurchaseOrder")
+        if purchase_order and hasattr(purchase_order, 'content'):
+            invoice_info["Purchase Order"] = purchase_order.content
+
+        # Billing information
         billing_address = invoice.fields.get("BillingAddress")
-        if billing_address:
-            invoice_data["Billing Address"] = billing_address.value
+        if billing_address and hasattr(billing_address, 'content'):
+            invoice_info["Billing Address"] = billing_address.content
 
-        billing_address_rec = invoice.fields.get("BillingAddressRecipient")
-        if billing_address_rec:
-            invoice_data["Billing Address Recipient"] = billing_address_rec.value
+        billing_address_recipient = invoice.fields.get("BillingAddressRecipient")
+        if billing_address_recipient and hasattr(billing_address_recipient, 'content'):
+            invoice_info["Billing Address Recipient"] = billing_address_recipient.content
 
-    results.append(invoice_data)
+        # Shipping information
+        shipping_address = invoice.fields.get("ShippingAddress")
+        if shipping_address and hasattr(shipping_address, 'content'):
+            invoice_info["Shipping Address"] = shipping_address.content
+
+        shipping_address_recipient = invoice.fields.get("ShippingAddressRecipient")
+        if shipping_address_recipient and hasattr(shipping_address_recipient, 'content'):
+            invoice_info["Shipping Address Recipient"] = shipping_address_recipient.content
+
+        # Totals
+        subtotal = invoice.fields.get("SubTotal")
+        if subtotal and hasattr(subtotal, 'content'):
+            invoice_info["Subtotal"] = subtotal.content
+
+        total_tax = invoice.fields.get("TotalTax")
+        if total_tax and hasattr(total_tax, 'content'):
+            invoice_info["Total Tax"] = total_tax.content
+
+        previous_unpaid_balance = invoice.fields.get("PreviousUnpaidBalance")
+        if previous_unpaid_balance and hasattr(previous_unpaid_balance, 'content'):
+            invoice_info["Previous Unpaid Balance"] = previous_unpaid_balance.content
+
+        amount_due = invoice.fields.get("AmountDue")
+        if amount_due and hasattr(amount_due, 'content'):
+            invoice_info["Amount Due"] = amount_due.content
+
+        # Service information
+        service_start_date = invoice.fields.get("ServiceStartDate")
+        if service_start_date and hasattr(service_start_date, 'content'):
+            invoice_info["Service Start Date"] = service_start_date.content
+
+        service_end_date = invoice.fields.get("ServiceEndDate")
+        if service_end_date and hasattr(service_end_date, 'content'):
+            invoice_info["Service End Date"] = service_end_date.content
+
+        service_address = invoice.fields.get("ServiceAddress")
+        if service_address and hasattr(service_address, 'content'):
+            invoice_info["Service Address"] = service_address.content
+
+        service_address_recipient = invoice.fields.get("ServiceAddressRecipient")
+        if service_address_recipient and hasattr(service_address_recipient, 'content'):
+            invoice_info["Service Address Recipient"] = service_address_recipient.content
+
+        # Remittance information
+        remittance_address = invoice.fields.get("RemittanceAddress")
+        if remittance_address and hasattr(remittance_address, 'content'):
+            invoice_info["Remittance Address"] = remittance_address.content
+
+        remittance_address_recipient = invoice.fields.get("RemittanceAddressRecipient")
+        if remittance_address_recipient and hasattr(remittance_address_recipient, 'content'):
+            invoice_info["Remittance Address Recipient"] = remittance_address_recipient.content
+
+        # Process Items as a table
+
+        # items_field = invoice.fields.get("Items")
+        # if items_field:
+        #         print("Items:")
+        #         print(items_field)
+        #         print("--------------------------------------------------")
+
+
+        
+        # Process Items as a table
+        items_field = invoice.fields.get("Items")
+        if items_field and items_field.value is not None:
+            table_data = {
+                "table_number": 1,
+                "cells": []
+            }
+
+            # Add header row
+            headers = ["Item", "Description", "Product Code", "Quantity", "Unit Price", "Amount"]
+            for col_idx, header in enumerate(headers):
+                table_data["cells"].append({
+                    "row_index": 0,
+                    "column_index": col_idx,
+                    "content": header
+                })
+
+            # Add data rows
+            for row_idx, item in enumerate(items_field.value, 1):
+                # Access the item dictionary directly (no need for .value here)
+                item_dict = item.value if hasattr(item, 'value') else {}
+
+                # Get field contents with safer access
+                description = item_dict.get("Description", {}).content if item_dict.get("Description") else "N/A"
+                product_code = item_dict.get("ProductCode", {}).content if item_dict.get("ProductCode") else "N/A"
+                quantity = item_dict.get("Quantity", {}).content if item_dict.get("Quantity") else "N/A"
+                unit_price = item_dict.get("UnitPrice", {}).content if item_dict.get("UnitPrice") else "N/A"
+                amount = item_dict.get("Amount", {}).content if item_dict.get("Amount") else "N/A"
+
+                # Create row data
+                values = [
+                    f"Item {row_idx}",  # or use actual item number if available
+                    description,
+                    product_code,
+                    quantity,
+                    unit_price,
+                    amount
+                ]
+
+                for col_idx, value in enumerate(values):
+                    table_data["cells"].append({
+                        "row_index": row_idx,
+                        "column_index": col_idx,
+                        "content": str(value)
+                    })
+
+            invoice_info["tables"] = [table_data]
+
+        results.append(invoice_info)
+
     return results
-def reciept_data(results, bill_data):
-    for idx, receipt in enumerate(bill_data.documents):
-        receipt_data = {}
 
-        receipt_type = receipt.doc_type
-        if receipt_type:
-            receipt_data["Receipt Type"] = receipt_type
-
-        merchant_name = receipt.fields.get("MerchantName")
-        if merchant_name:
-            receipt_data["Merchant Name"] = merchant_name.value
-
-        transaction_date = receipt.fields.get("TransactionDate")
-        if transaction_date:
-            receipt_data["Transaction Date"] = transaction_date.value
-
-        subtotal = receipt.fields.get("Subtotal")
-        if subtotal:
-            receipt_data["Subtotal"] = subtotal.value
-
-        tax = receipt.fields.get("TotalTax")
-        if tax:
-            receipt_data["Tax"] = tax.value
-
-        tip = receipt.fields.get("Tip")
-        if tip:
-            receipt_data["Tip"] = tip.value
-
-        total = receipt.fields.get("Total")
-        if total:
-            receipt_data["Total"] = total.value
-
-    results.append(receipt_data)
-    return results
+\
 def awb_data(results, bill_data):
     for idx, doc in enumerate(bill_data.documents):
         doc_data = {}
