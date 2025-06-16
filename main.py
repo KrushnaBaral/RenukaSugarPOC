@@ -1969,58 +1969,76 @@ def clean_date_string(date_str):
 
 #     raise ValueError(f"Unrecognized date format: '{date_str}'. Cleaned: {date_str}")
 def parse_date(date_str):
-    """Robust date parser that handles messy formats including spaces and partial years"""
-    if not date_str:
-        return None
-
-    cleaned_date = clean_date_string(date_str)
-
-    # List of possible date formats to try (order matters!)
-    formats = [
-        "%d/%m/%Y",    # 06/05/2025
-        "%d-%m-%Y",    # 06-05-2025
-        "%d.%m.%Y",    # 06.05.2025
-        "%Y-%m-%d",    # 2025-05-06 (ISO)
-        "%d/%m/%y",    # 06/05/25
-        "%d-%b-%y",    # 06-May-25
-        "%b %d, %Y",   # May 06, 2025
-        "%d/%m/%y",    # 06/05/20 (2-digit year)
-    ]
-
-    for fmt in formats:
-        try:
-            parsed_date = datetime.strptime(cleaned_date, fmt).date()
-            # Handle 2-digit years (assuming 20xx for years < 100)
-            if fmt.endswith("%y") and parsed_date.year < 2000:
-                parsed_date = parsed_date.replace(year=parsed_date.year + 2000)
-            return parsed_date
-        except ValueError:
-            continue
-
-    # Fallback for partial year formats (like '06/05/202')
     try:
-        # Try to parse with full year format but be lenient about year length
-        if re.match(r'\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}', cleaned_date):
-            day, month, year = re.split(r'[/\-.]', cleaned_date)
-            if len(year) == 3:  # Handle 3-digit years (assume missing last digit)
-                year = year + '5'
-            elif len(year) == 2:  # Handle 2-digit years
-                year = '20' + year
-            return datetime.strptime(f"{day}/{month}/{year}", "%d/%m/%Y").date()
-    except ValueError:
-        pass
+        # Handle date format like '6-May-25'
+        return datetime.strptime(date_str, "%d-%b-%y")
+    except ValueError as e:
+        logger.error(f"Date parsing error for '{date_str}': {e}")
+        raise ValueError(f"Unsupported date format: {date_str} - {str(e)}")
 
-    raise ValueError(f"Unrecognized date format: '{date_str}'. Cleaned: {cleaned_date}")
+def safe_text(value):
+    """Returns 'NA' if value is None or empty string"""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return "NA"
+    return value
+
 @app.post("/insert_invoices")
 async def insert_invoices(request: Request):
+    conn = None
+    cur = None
+
+    # Define field mappings
+    FIELD_MAP = {
+        "Invoice ID": "invoice_id",
+        "Invoice Number": "invoice_number",
+        "Invoice Date": "invoice_date",
+        "Vendor Name": "vendor_name",
+        "Invoice Total": "invoice_total",
+        "Vendor Address": "vendor_address",
+        "Vendor Address Recipient": "vendor_address_recipient",
+        "Customer Name": "customer_name",
+        "Purchase Order": "purchase_order",
+        "Billing Address": "billing_address",
+        "Billing Address Recipient": "billing_address_recipient",
+        "Subtotal": "subtotal",
+        "Total Tax": "total_tax",
+        "Customer Address": "customer_address",
+        "Customer Address Recipient": "customer_address_recipient",
+        "Shipping Address": "shipping_address",
+        "Shipping Address Recipient": "shipping_address_recipient",
+        "Due Date": "due_date",
+        "Amount Due": "amount_due",
+        "Service Start Date": "service_start_date",
+        "Service End Date": "service_end_date",
+        "Customer ID": "customer_id"
+    }
+
+    def safe_text(value):
+        """Convert None to 'NA' for text fields"""
+        return "NA" if value is None else str(value).strip()
+
+    def parse_date_safe(date_value):
+        """Safely parse date from string or return None"""
+        if date_value is None:
+            return None
+        if isinstance(date_value, datetime):
+            return date_value.date()
+        try:
+            # Handle string dates
+            if isinstance(date_value, str):
+                return parse_date(date_value).date()
+            return None
+        except:
+            return None
+
     try:
         data = await request.json()
+        logger.info(f"Data received for insertion: {data}")
 
         def clean_numeric(value):
-            """Robust cleaning of numeric values with multiple fallbacks"""
+            """Robust cleaning of numeric values"""
             if value is None:
                 return 0.0
-
             if isinstance(value, (int, float)):
                 return float(value)
 
@@ -2028,28 +2046,29 @@ async def insert_invoices(request: Request):
             if not str_value:
                 return 0.0
 
-            # Remove all non-numeric characters except decimal point and minus
-            cleaned = re.sub(r"[^\d.-]", "", str_value)
-
-            # Handle cases like "55000/-" by taking first numeric part
+            # Handle currency symbols and thousand separators
+            cleaned = re.sub(r"[^\d.]", "", str_value.replace('₹', '').strip())
             if "/" in str_value:
                 cleaned = cleaned.split("/")[0]
 
             try:
                 return float(cleaned) if cleaned else 0.0
-            except ValueError:
+            except ValueError as e:
+                logger.warning(f"Could not convert '{value}' to float: {e}")
                 return 0.0
 
         def preprocess_item(item):
-            """Preprocess item with robust numeric cleaning"""
+            """Process invoice items with proper field mapping"""
             if not item.get("description"):
+                logger.warning("Item missing description")
                 return None
 
             return {
+                "item_name": item.get("item_name", ""),
                 "description": item["description"],
-                "qty": clean_numeric(item.get("qty")),
-                "weight": clean_numeric(item.get("weight")),
-                "rate": clean_numeric(item.get("rate")),
+                "product_code": item.get("product_code", ""),
+                "quantity": clean_numeric(item.get("quantity")),
+                "unit_price": clean_numeric(item.get("unit_price")),
                 "amount": clean_numeric(item.get("amount"))
             }
 
@@ -2057,77 +2076,138 @@ async def insert_invoices(request: Request):
         cur = conn.cursor()
 
         for entry in data:
-            row = {}
-            items = [preprocess_item(i) for i in entry.get("items", []) if preprocess_item(i)]
+            try:
+                # Map fields using FIELD_MAP
+                row = {}
+                items = [preprocess_item(i) for i in entry.get("items", []) if preprocess_item(i)]
 
-            # Process main invoice fields
-            for key, value in entry.items():
-                if key == "items":
-                    continue
-                if mapped_key := FIELD_MAP.get(key):
-                    row[mapped_key] = value
+                for key, value in entry.items():
+                    if key == "items":
+                        continue
+                    if mapped_key := FIELD_MAP.get(key):
+                        if mapped_key in ["invoice_total", "subtotal", "total_tax", "amount_due"]:
+                            row[mapped_key] = clean_numeric(value)
+                        elif mapped_key.endswith("_date"):
+                            row[mapped_key] = parse_date_safe(value)
+                        else:
+                            row[mapped_key] = safe_text(value)
 
-            # Date handling
-            invoice_date = None
-            if date_str := row.get("invoice_date"):
-                try:
-                    invoice_date = parse_date(date_str)
-                except ValueError as e:
+                # Determine invoice ID (fallback to invoice number if needed)
+                invoice_id = row.get("invoice_id") or row.get("invoice_number")
+                if not invoice_id:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Invalid date format: '{date_str}'. Expected formats: DD/MM/YYYY, DD-MM-YYYY, etc."
+                        detail="Missing both Invoice ID and Invoice Number"
                     )
-            # Insert invoice
-            cur.execute("""
-                INSERT INTO invoices (
-                    invoice_number,
-                    invoice_date,
-                    vendor_name,
-                    gstin,
-                    total_amount                ) VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (invoice_number) DO NOTHING
-                RETURNING id;
-            """, (
-                row.get("invoice_number"),
-                invoice_date,
-                row.get("vendor_name"),
-                row.get("gstin"),
-                clean_numeric(row.get("total_amount"))            ))
 
-            # Get invoice ID
-            if result := cur.fetchone():
-                invoice_id = result[0]
-            else:
-                cur.execute("SELECT id FROM invoices WHERE invoice_number = %s",
-                          (row.get("invoice_number"),))
-                invoice_id = cur.fetchone()[0]
-
-            # Insert items
-            for item in items:
+                # Insert invoice
                 cur.execute("""
-                    INSERT INTO invoice_items (
+                    INSERT INTO invoice(
                         invoice_id,
-                        description_of_goods,
-                        quantity,
-                        weight,
-                        rate,
-                        amount
-                    ) VALUES (%s, %s, %s, %s, %s, %s);
+                        invoice_date,
+                        vendor_name,
+                        invoice_total,
+                        vendor_address,
+                        vendor_address_recipient,
+                        customer_name,
+                        purchase_order,
+                        billing_address,
+                        billing_address_recipient,
+                        subtotal,
+                        total_tax,
+                        customer_address,
+                        customer_address_recipient,
+                        shipping_address,
+                        shipping_address_recipient,
+                        due_date,
+                        amount_due,
+                        service_start_date,
+                        service_end_date,
+                        customer_id
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (invoice_id) DO NOTHING
+                    RETURNING invoice_id;
                 """, (
                     invoice_id,
-                    item["description"],
-                    item["qty"],
-                    item["weight"],
-                    item["rate"],
-                    item["amount"]
+                    row.get("invoice_date"),
+                    safe_text(row.get("vendor_name")),
+                    row.get("invoice_total", 0.0),
+                    safe_text(row.get("vendor_address")),
+                    safe_text(row.get("vendor_address_recipient")),
+                    safe_text(row.get("customer_name")),
+                    safe_text(row.get("purchase_order")),
+                    safe_text(row.get("billing_address")),
+                    safe_text(row.get("billing_address_recipient")),
+                    row.get("subtotal", 0.0),
+                    row.get("total_tax", 0.0),
+                    safe_text(row.get("customer_address")),
+                    safe_text(row.get("customer_address_recipient")),
+                    safe_text(row.get("shipping_address")),
+                    safe_text(row.get("shipping_address_recipient")),
+                    row.get("due_date"),
+                    row.get("amount_due", 0.0),
+                    row.get("service_start_date"),
+                    row.get("service_end_date"),
+                    safe_text(row.get("customer_id"))
                 ))
 
-        conn.commit()
-        return {"message": f"Successfully inserted {len(data)} invoices"}
+                # If no rows were inserted (due to conflict), fetch existing ID
+                if not cur.fetchone():
+                    cur.execute("SELECT invoice_id FROM invoice WHERE invoice_id = %s", (invoice_id,))
+                    if not (result := cur.fetchone()):
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Failed to insert or retrieve invoice {invoice_id}"
+                        )
 
+                # Insert items
+                for item in items:
+                    cur.execute("""
+                        INSERT INTO invoice_item_list (
+                            invoice_id,
+                            item_name,
+                            description,
+                            product_code,
+                            quantity,
+                            unit_price,
+                            amount
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s);
+                    """, (
+                        invoice_id,
+                        item["item_name"],
+                        item["description"],
+                        item["product_code"],
+                        item["quantity"],
+                        item["unit_price"],
+                        item["amount"]
+                    ))
+
+                logger.info(f"Successfully processed invoice {invoice_id}")
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Error processing invoice: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error processing invoice: {str(e)}"
+                )
+
+        conn.commit()
+        return {"message": f"Successfully processed {len(data)} invoices"}
+
+    except HTTPException:
+        raise
     except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        if conn:
+            conn.rollback()
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Server error: {str(e)}"
+        )
     finally:
-        cur.close()
-        conn.close()
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
