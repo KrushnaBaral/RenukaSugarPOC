@@ -56,7 +56,7 @@ import pandas as pd
 # Add these imports at the top of your FastAPI file
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
-from bill_datas import invoice_data, reciept_data, awb_data, packing_data,renuka_data
+from bill_datas import invoice_data, awb_data, packing_data,renuka_data
 import os
 from io import BytesIO
 from werkzeug.utils import secure_filename
