@@ -91,6 +91,10 @@ AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
 
 app = FastAPI()
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Set up static files and templates
 app.mount("/stats", StaticFiles(directory="stats"), name="stats")
 templates = Jinja2Templates(directory="templates")
